@@ -7,8 +7,8 @@ struct DiscoverMutationPoints: RunCommandStep {
     func run(with state: AnyRunCommandState) -> Result<[RunCommandState.Change], MuterError> {
         
         notificationCenter.post(name: .mutationPointDiscoveryStarted, object: nil)
-
-        let (mutationPoints, sourceCodeByFilePath) = discoverMutationPoints(inFilesAt: state.sourceFileCandidates)
+        
+        let (mutationPoints, sourceCodeByFilePath) = discoverMutationPoints(inFilesAt: state.sourceFileCandidates, configuration: state.muterConfiguration)
         
         notificationCenter.post(name: .mutationPointDiscoveryFinished, object: mutationPoints)
         
@@ -23,7 +23,7 @@ struct DiscoverMutationPoints: RunCommandStep {
 
 private extension DiscoverMutationPoints {
     
-    func discoverMutationPoints(inFilesAt filePaths: [String]) -> (mutationPoints: [MutationPoint], sourceCodeByFilePath: [FilePath: SourceFileSyntax]) {
+    func discoverMutationPoints(inFilesAt filePaths: [String], configuration: MuterConfiguration) -> (mutationPoints: [MutationPoint], sourceCodeByFilePath: [FilePath: SourceFileSyntax]) {
         
         var sourceCodeByFilePath: [FilePath: SourceFileSyntax] = [:]
         let excludedMutationPoints = loadMutationPointsToExclude(inFilesAt: filePaths)
@@ -34,8 +34,8 @@ private extension DiscoverMutationPoints {
                 let source = sourceCode(fromFileAt: path) else {
                     return alreadyDiscoveredMutationPoints
             }
-
-            let newMutationPoints = discoverNewMutationPoints(inFileAt: path, containing: source)
+            
+            let newMutationPoints = discoverNewMutationPoints(inFileAt: path, containing: source, configuration: configuration)
                 .filter { !excludedMutationPoints.contains(where: $0.matchesByLine) }
                 .sorted(by: filePositionOrder)
             
@@ -52,10 +52,10 @@ private extension DiscoverMutationPoints {
         )
     }
     
-    func discoverNewMutationPoints(inFileAt path: String, containing source: SourceFileSyntax) -> [MutationPoint] {
+    func discoverNewMutationPoints(inFileAt path: String, containing source: SourceFileSyntax, configuration: MuterConfiguration) -> [MutationPoint] {
         return MutationOperator.Id.allCases.accumulate(into: []) { newMutationPoints, mutationOperatorId in
             
-            let visitor = mutationOperatorId.rewriterVisitorPair.visitor()
+            let visitor = mutationOperatorId.rewriterVisitorPair.visitor(configuration)
             visitor.visit(source)
             
             return newMutationPoints + visitor.positionsOfToken.map { position in
