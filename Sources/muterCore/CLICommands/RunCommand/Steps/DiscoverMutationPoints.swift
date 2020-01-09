@@ -26,8 +26,6 @@ private extension DiscoverMutationPoints {
     func discoverMutationPoints(inFilesAt filePaths: [String], configuration: MuterConfiguration) -> (mutationPoints: [MutationPoint], sourceCodeByFilePath: [FilePath: SourceFileSyntax]) {
         
         var sourceCodeByFilePath: [FilePath: SourceFileSyntax] = [:]
-        let excludedMutationPoints = loadMutationPointsToExclude(inFilesAt: filePaths)
-
         let mutationPoints: [MutationPoint] = filePaths.accumulate(into: []) { alreadyDiscoveredMutationPoints, path in
             
             guard pathContainsDotSwift(path),
@@ -35,9 +33,7 @@ private extension DiscoverMutationPoints {
                     return alreadyDiscoveredMutationPoints
             }
             
-            let newMutationPoints = discoverNewMutationPoints(inFileAt: path, containing: source, configuration: configuration)
-                .filter { !excludedMutationPoints.contains(where: $0.matchesByLine) }
-                .sorted(by: filePositionOrder)
+            let newMutationPoints = discoverNewMutationPoints(inFileAt: path, containing: source, configuration: configuration).sorted(by: filePositionOrder)
             
             if !newMutationPoints.isEmpty {
                 sourceCodeByFilePath[path] = source
@@ -53,15 +49,21 @@ private extension DiscoverMutationPoints {
     }
     
     func discoverNewMutationPoints(inFileAt path: String, containing source: SourceFileSyntax, configuration: MuterConfiguration) -> [MutationPoint] {
+
+        let excludedMutationPointsDetector = ExcludedMutationPointsDetector()
+        excludedMutationPointsDetector.visit(source)
+
         return MutationOperator.Id.allCases.accumulate(into: []) { newMutationPoints, mutationOperatorId in
             
             let visitor = mutationOperatorId.rewriterVisitorPair.visitor(configuration)
             visitor.visit(source)
             
-            return newMutationPoints + visitor.positionsOfToken.map { position in
-                return MutationPoint(mutationOperatorId: mutationOperatorId,
-                                     filePath: path,
-                                     position: position)
+            return newMutationPoints + visitor.positionsOfToken
+                .filter { !excludedMutationPointsDetector.excludedLines.contains($0.line) }
+                .map { position in
+                    return MutationPoint(mutationOperatorId: mutationOperatorId,
+                                         filePath: path,
+                                         position: position)
             }
         }
     }
