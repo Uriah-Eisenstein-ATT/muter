@@ -15,11 +15,11 @@ struct DiscoverSourceFiles: RunCommandStep {
     func run(with state: AnyRunCommandState) -> Result<[RunCommandState.Change], MuterError> {
         
         notificationCenter.post(name: .sourceFileDiscoveryStarted, object: nil)
-
+        
         let path = state.dryRun ? state.projectDirectoryURL.path : state.tempDirectoryURL.path
         let sourceFileCandidates = state.filesToMutate.isEmpty ?
             discoverSourceFiles(inDirectoryAt: path,
-                                excludingPathsIn: state.muterConfiguration.excludeList) :
+                                excludingPathsIn: state.muterConfiguration.excludeFileList) :
             findFilesToMutate(files: state.filesToMutate,
                               inDirectoryAt: path)
         
